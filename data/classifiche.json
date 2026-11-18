@@ -15622,6 +15622,12 @@
  ],
  "notizie": [
   {
+   "titolo": "Il Comitato di Como e Lecco premia i suoi campioni",
+   "url": "https://ficsf.it/2026/11/il-comitato-di-como-e-lecco-premia-i-suoi-campioni/",
+   "data": "2026-11-17",
+   "club": false
+  },
+  {
    "titolo": "Domenica 13 dicembre a Osteno la Coppa d’Inverno",
    "url": "https://ficsf.it/2026/11/domenica-13-dicembre-a-osteno-la-coppa-dinverno/",
    "data": "2026-11-12",
@@ -15688,12 +15694,6 @@
    "club": false
   },
   {
-   "titolo": "Circolare FICSF 22 ottobre 2026",
-   "url": "https://ficsf.it/2026/10/circolare-ficsf-22-ottobre-2026/",
-   "data": "2026-10-25",
-   "club": false
-  },
-  {
    "titolo": "Sirmione: i Tricolori VIP 7,50 RISULTATI BATTERIE/RECUPERI e FINALI",
    "url": "https://ficsf.it/2026/09/sirmione-il-26-e-27-settembre-i-tricolori-vip-750/",
    "data": "2026-09-26",
@@ -15745,6 +15745,6 @@
  "pagina": "https://ficsf.it/classifiche/classifiche-2026/",
  "stato": "ok",
  "messaggio": "",
- "aggiornato": "2026-11-13T05:29:53+00:00",
- "controllato": "2026-11-13T05:29:53+00:00"
+ "aggiornato": "2026-11-18T05:33:14+00:00",
+ "controllato": "2026-11-18T05:33:14+00:00"
 }
