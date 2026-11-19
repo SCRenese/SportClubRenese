@@ -15742,9 +15742,8 @@
    "club": false
   }
  ],
- "pagina": "https://ficsf.it/classifiche/classifiche-2026/",
- "stato": "ok",
- "messaggio": "",
- "aggiornato": "2026-11-18T05:33:14+00:00",
- "controllato": "2026-11-18T05:33:14+00:00"
+ "stato": "parziale",
+ "messaggio": "Ultimo controllo: pagina classifiche non raggiungibile (Nessuna pagina classifiche con PDF trovata). Restano i dati letti in precedenza.",
+ "aggiornato": "2026-11-19T05:34:19+00:00",
+ "controllato": "2026-11-19T05:34:19+00:00"
 }
