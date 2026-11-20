@@ -15622,6 +15622,12 @@
  ],
  "notizie": [
   {
+   "titolo": "Corso di aggiornamento allenatori 2 dicembre 2026",
+   "url": "https://ficsf.it/2026/11/corso-di-aggiornamento-allenatori-2-dicembre-2026/",
+   "data": "2026-11-18",
+   "club": false
+  },
+  {
    "titolo": "Il Comitato di Como e Lecco premia i suoi campioni",
    "url": "https://ficsf.it/2026/11/il-comitato-di-como-e-lecco-premia-i-suoi-campioni/",
    "data": "2026-11-17",
@@ -15734,16 +15740,11 @@
    "url": "https://ficsf.it/2026/08/regata-del-mediterraneo-2026-oro-per-la-rappresentativa-ficsf/",
    "data": "2026-08-03",
    "club": false
-  },
-  {
-   "titolo": "“I Tesori del Mediterraneo”: FICSF prima in batteria",
-   "url": "https://ficsf.it/2026/08/i-tesori-del-mediterraneo-ficsf-prima-in-batteria/",
-   "data": "2026-08-01",
-   "club": false
   }
  ],
- "stato": "parziale",
- "messaggio": "Ultimo controllo: pagina classifiche non raggiungibile (Nessuna pagina classifiche con PDF trovata). Restano i dati letti in precedenza.",
- "aggiornato": "2026-11-19T05:34:19+00:00",
- "controllato": "2026-11-19T05:34:19+00:00"
+ "pagina": "https://ficsf.it/classifiche/classifiche-2026/",
+ "stato": "ok",
+ "messaggio": "",
+ "aggiornato": "2026-11-20T05:33:45+00:00",
+ "controllato": "2026-11-20T05:33:45+00:00"
 }
