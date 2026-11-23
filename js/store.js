@@ -221,6 +221,7 @@
         }
         let rows = db[table].filter(r => matches(r, q));
         if (table === 'profili' && !gestisce('iscrizioni')) rows = rows.filter(r => r.id === cur);
+        if (table === 'partecipazioni') rows = rows.filter(r => r.user_id === cur || gestisce(sez((db.attivita.find(a => a.id === r.attivita_id) || {}).tipo)));   // note: solo interessato e gestori
         if (me().stato !== 'attivo' && table !== 'profili') rows = [];
         if (table === 'resoconti' && !['senior', 'junior'].includes(me().ruolo)) rows = rows.filter(r => r.atleta_id === cur);
         if (q && q.order) rows = rows.slice().sort((a, b) => (a[q.order] > b[q.order] ? 1 : a[q.order] < b[q.order] ? -1 : 0) * (q.asc === false ? -1 : 1));
@@ -242,7 +243,9 @@
       async update(table, match, patch) {
         const rows = db[table].filter(r => matches(r, { eq: match }));
         rows.forEach(r => guard(table, 'update', patch, r));
-        rows.forEach(r => Object.assign(r, patch)); save();
+        const fisso = { attivita: 'creato_da', resoconti: 'autore_id', risultati: 'autore_id' }[table];   // come forza_autore nel database
+        if (fisso) patch = Object.assign({}, patch, { [fisso]: undefined });
+        rows.forEach(r => { const v = fisso && r[fisso]; Object.assign(r, patch); if (fisso) r[fisso] = v; }); save();
         return JSON.parse(JSON.stringify(rows));
       },
       async upsert(table, row, onConflict) {
