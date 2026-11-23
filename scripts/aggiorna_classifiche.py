@@ -25,7 +25,7 @@ import urllib.request
 BASE = "https://ficsf.it"
 PAGINA_CLASSIFICHE = BASE + "/classifiche/"
 OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data", "classifiche.json")
-UA = "Mozilla/5.0 (compatible; SportClubReneseApp/1.0; +https://github.com/SCRenese/sportclubrenese)"
+UA = "Mozilla/5.0 (compatible; SportClubReneseApp/1.0; +https://github.com/SCRenese/SportClubRenese)"
 CLUB = re.compile(r"\brenese\b", re.I)
 CATEGORIE = re.compile(r"\b(ESORDIENT\w*|ALLIEV\w*|CADETT\w*|RAGAZZ\w*|JUNIOR\w*|SENIOR\w*|MASTER\w*|UNDER\s?\d+|U\d{2})\b", re.I)
 SPECIALITA = ["Jole", "Elba", "Gozzo", "VIP", "Lance", "Galeone", "Lucia"]
