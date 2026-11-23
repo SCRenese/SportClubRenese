@@ -193,9 +193,10 @@
         if (old.ruolo === 'senior' && ((row.ruolo && row.ruolo !== 'senior') || (row.stato && row.stato !== 'attivo')) &&
             !db.profili.some(x => x.id !== old.id && x.ruolo === 'senior' && x.stato === 'attivo')) nega('Serve almeno un amministratore senior: nomina prima un altro senior');
       }
-      if ((table === 'resoconti' && !gestisce('allenamenti')) || (table === 'risultati' && !gestisce('gare'))) {
+      if (table === 'resoconti' && !gestisce('allenamenti')) {
         if ((row.atleta_id || old.atleta_id) !== p.id || p.tipo !== 'atleta') nega('Puoi modificare solo la tua scheda');
       }
+      if (table === 'risultati' && !gestisce('gare')) nega('Posizioni e tempi li inseriscono solo i gestori delle gare');
     }
 
     return {
@@ -214,6 +215,10 @@
           return db.profili.filter(p => p.id === cur || (me().stato === 'attivo' && p.stato === 'attivo'))
             .map(p => Object.fromEntries(ok.map(k => [k, p[k]])));
         }
+        if (table === 'partecipazioni_pub') {   // come la vista: niente note personali
+          if (me().stato !== 'attivo') return [];
+          return db.partecipazioni.map(p => ({ attivita_id: p.attivita_id, user_id: p.user_id, risposta: p.risposta, presente: p.presente, aggiornato: p.aggiornato }));
+        }
         let rows = db[table].filter(r => matches(r, q));
         if (table === 'profili' && !gestisce('iscrizioni')) rows = rows.filter(r => r.id === cur);
         if (me().stato !== 'attivo' && table !== 'profili') rows = [];
@@ -222,7 +227,7 @@
         return JSON.parse(JSON.stringify(rows));
       },
       async insert(table, rows) {
-        const arr = (Array.isArray(rows) ? rows : [rows]).map(r => {
+        const arr = (Array.isArray(rows) ? rows : [rows]).map(r => {   // autore e creatore li imposta sempre il sistema
           const x = Object.assign({}, r);
           if (table !== 'partecipazioni' && !x.id) x.id = uid();
           if (!x.creato) x.creato = new Date().toISOString();

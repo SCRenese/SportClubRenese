@@ -121,7 +121,7 @@
       // chi gestisce le iscrizioni legge i profili completi; gli altri solo la vista pubblica (nome, cognome, tipo)
       Store.list(puoGestire('iscrizioni') ? 'profili' : 'profili_pub', { order: 'cognome' }),
       Store.list('attivita', { gte: { inizio: from }, order: 'inizio' }),
-      Store.list('partecipazioni')
+      Store.list('partecipazioni_pub')   // risposte e presenze, senza le note personali
     ]);
     S.profili = profili; S.att = att; S.part = part;
   }
@@ -821,7 +821,7 @@
     if (currentView() !== 'scheda') return;
     const u = S.ui;
     const modReso = puoGestire('allenamenti') || (id === S.me.id && isAtleta());
-    const modRis = puoGestire('gare') || (id === S.me.id && isAtleta());
+    const modRis = puoGestire('gare');   // posizioni e tempi: solo i gestori delle gare
     const t = now(), d30 = new Date(t - 30 * 864e5);
     const all30 = S.att.filter(x => x.tipo === 'allenamento' && new Date(x.inizio) < t && new Date(x.inizio) >= d30);
     const pres30 = all30.filter(x => S.part.some(p => p.attivita_id === x.id && p.user_id === id && p.presente)).length;

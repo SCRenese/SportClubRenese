@@ -1,7 +1,9 @@
 {
-  "version": "1.1.0",
+  "version": "1.2.0",
   "date": "23/11/2026",
   "notes": [
+    "Le note personali nelle iscrizioni sono visibili solo a te e agli amministratori",
+    "Posizioni e tempi di gara li inseriscono solo gli amministratori delle gare",
     "Privacy: i soci vedono solo nome e cognome degli altri soci",
     "Iscrizione con data di nascita, informativa e consenso del genitore per i minorenni",
     "Classifiche senza numeri di tessera; nessun carattere caricato da Google"

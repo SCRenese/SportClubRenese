@@ -304,7 +304,10 @@ drop policy if exists "part leggi" on public.partecipazioni;
 drop policy if exists "part crea" on public.partecipazioni;
 drop policy if exists "part modifica" on public.partecipazioni;
 drop policy if exists "part elimina" on public.partecipazioni;
-create policy "part leggi" on public.partecipazioni for select to authenticated using (e_attivo());
+-- La nota personale la leggono solo l'interessato e chi gestisce la sezione;
+-- gli altri soci vedono risposte e presenze dalla vista partecipazioni_pub (senza nota).
+create policy "part leggi" on public.partecipazioni for select to authenticated using (
+  user_id = auth.uid() or exists (select 1 from attivita a where a.id = attivita_id and puo_gestire(sezione_di(a.tipo))));
 create policy "part crea" on public.partecipazioni for insert to authenticated with check (
   exists (select 1 from attivita a where a.id = attivita_id and (
     puo_gestire(sezione_di(a.tipo)) or (user_id = auth.uid() and puo_partecipare(sezione_di(a.tipo))))));
@@ -314,6 +317,27 @@ create policy "part modifica" on public.partecipazioni for update to authenticat
 create policy "part elimina" on public.partecipazioni for delete to authenticated using (
   exists (select 1 from attivita a where a.id = attivita_id and (
     puo_gestire(sezione_di(a.tipo)) or user_id = auth.uid())));
+
+create or replace view public.partecipazioni_pub with (security_barrier = true) as
+  select attivita_id, user_id, risposta, presente, aggiornato
+  from public.partecipazioni
+  where e_attivo();
+
+-- Autore e creatore non falsificabili: li imposta il database, non il client.
+create or replace function public.forza_autore() returns trigger
+language plpgsql security definer set search_path = public as $$
+declare col text := tg_argv[0]; v uuid;
+begin
+  if auth.uid() is null then return new; end if;     -- SQL Editor / servizio
+  if tg_op = 'INSERT' then v := auth.uid();
+  else execute format('select ($1).%I', col) into v using old; end if;
+  new := jsonb_populate_record(new, jsonb_build_object(col, v));
+  return new;
+end $$;
+
+drop trigger if exists forza_autore on public.attivita;
+create trigger forza_autore before insert or update on public.attivita
+  for each row execute function public.forza_autore('creato_da');
 
 -- 7. Scheda atleta: resoconti degli allenamenti --------------------------------
 create table if not exists public.resoconti (
@@ -376,29 +400,34 @@ drop policy if exists "ris crea" on public.risultati;
 drop policy if exists "ris modifica" on public.risultati;
 drop policy if exists "ris elimina" on public.risultati;
 create policy "ris leggi" on public.risultati for select to authenticated using (e_attivo());
-create policy "ris crea" on public.risultati for insert to authenticated with check (
-  puo_gestire('gare') or (atleta_id = auth.uid() and e_attivo()
-    and exists (select 1 from profili where id = auth.uid() and tipo = 'atleta')));
+-- Posizioni e tempi sono dati ufficiali: li scrivono solo i gestori delle gare,
+-- l'atleta non può inventarli né modificarli.
+create policy "ris crea" on public.risultati for insert to authenticated with check (puo_gestire('gare'));
 create policy "ris modifica" on public.risultati for update to authenticated
-  using (puo_gestire('gare') or atleta_id = auth.uid())
-  with check (puo_gestire('gare') or atleta_id = auth.uid());
-create policy "ris elimina" on public.risultati for delete to authenticated
-  using (puo_gestire('gare') or atleta_id = auth.uid());
+  using (puo_gestire('gare')) with check (puo_gestire('gare'));
+create policy "ris elimina" on public.risultati for delete to authenticated using (puo_gestire('gare'));
+
+drop trigger if exists forza_autore on public.resoconti;
+create trigger forza_autore before insert or update on public.resoconti
+  for each row execute function public.forza_autore('autore_id');
+drop trigger if exists forza_autore on public.risultati;
+create trigger forza_autore before insert or update on public.risultati
+  for each row execute function public.forza_autore('autore_id');
 
 -- 9. Permessi di base per gli utenti collegati -----------------------------------
 -- Supabase concede di default privilegi larghi a anon/authenticated sui nuovi
 -- oggetti: li togliamo e riassegniamo solo quelli necessari.
 revoke all on public.profili, public.attivita, public.partecipazioni,
-  public.resoconti, public.risultati, public.profili_pub from public, anon;
+  public.resoconti, public.risultati, public.profili_pub, public.partecipazioni_pub from public, anon;
 grant usage on schema public to authenticated;
 grant select, insert, update, delete on public.profili, public.attivita, public.partecipazioni,
   public.resoconti, public.risultati to authenticated;
-grant select on public.profili_pub to authenticated;
+grant select on public.profili_pub, public.partecipazioni_pub to authenticated;
 
 revoke execute on function public.e_senior(), public.e_admin(), public.e_attivo(),
   public.puo_gestire(text), public.puo_partecipare(text), public.sezione_di(text),
   public.e_minorenne(date), public.nuovo_profilo(), public.proteggi_profilo(),
-  public.controlla_partecipazione() from public, anon;
+  public.controlla_partecipazione(), public.forza_autore() from public, anon;
 grant execute on function public.e_senior(), public.e_admin(), public.e_attivo(),
   public.puo_gestire(text), public.puo_partecipare(text), public.sezione_di(text),
   public.e_minorenne(date) to authenticated;
