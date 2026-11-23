@@ -47,9 +47,9 @@
       },
       user: () => user,
       async signIn(email, password) { chk(await sb.auth.signInWithPassword({ email, password })); },
-      async signUp({ email, password, nome, cognome, tipo }) {
+      async signUp({ email, password, nome, cognome, tipo, data_nascita, tutore_nome, tutore_contatto, privacy_versione }) {
         const res = chk(await sb.auth.signUp({ email, password, options: {
-          data: { nome, cognome, tipo }, emailRedirectTo: location.href.split('#')[0] } }));
+          data: { nome, cognome, tipo, data_nascita, tutore_nome, tutore_contatto, privacy_versione }, emailRedirectTo: location.href.split('#')[0] } }));
         return { needsConfirm: !res.session };
       },
       async signOut() { await sb.auth.signOut(); user = null; },
@@ -179,6 +179,14 @@
       }
       if (table === 'profili' && op === 'update') {
         const senior = p.ruolo === 'senior';
+        if (!senior && old.ruolo === 'senior' && old.id !== p.id) nega('Solo un amministratore senior può modificare un altro senior');
+        if (!senior && 'consenso_tutore_il' in row && row.consenso_tutore_il !== old.consenso_tutore_il && !gestisce('iscrizioni')) nega('Non hai il permesso di gestire le iscrizioni');
+        if (row.stato === 'attivo' && old.stato !== 'attivo') {
+          const nasc = 'data_nascita' in row ? row.data_nascita : old.data_nascita;
+          const cons = 'consenso_tutore_il' in row ? row.consenso_tutore_il : old.consenso_tutore_il;
+          if (!nasc) nega('Serve la data di nascita per attivare il socio');
+          if (new Date(nasc) > new Date(new Date().setFullYear(new Date().getFullYear() - 18)) && !cons) nega('Socio minorenne: registra prima il consenso del genitore o tutore');
+        }
         const riservati = ['ruolo', 'tipo', 'perm_allenamenti', 'perm_gare', 'perm_eventi', 'gest_iscrizioni', 'gest_allenamenti', 'gest_gare', 'gest_eventi'];
         if (!senior && riservati.some(k => k in row && row[k] !== old[k])) nega('Solo l’amministratore senior può cambiare ruoli e permessi');
         if (!senior && (('stato' in row && row.stato !== old.stato) || ('scadenza' in row && row.scadenza !== old.scadenza)) && !gestisce('iscrizioni')) nega('Non hai il permesso di gestire le iscrizioni');
@@ -201,7 +209,13 @@
       reset() { localStorage.removeItem(KEY); load(); },
       profiles() { return db.profili.map(p => ({ id: p.id, label: p.nome + ' ' + p.cognome + ' · ' + (p.ruolo === 'socio' ? p.tipo : 'admin ' + p.ruolo) + (p.stato !== 'attivo' ? ' (' + p.stato.replace('_', ' ') + ')' : '') })); },
       async list(table, q) {
+        if (table === 'profili_pub') {   // come la vista del database: solo dati non sensibili
+          const ok = ['id', 'nome', 'cognome', 'tipo', 'ruolo', 'stato', 'perm_allenamenti', 'perm_gare', 'perm_eventi'];
+          return db.profili.filter(p => p.id === cur || (me().stato === 'attivo' && p.stato === 'attivo'))
+            .map(p => Object.fromEntries(ok.map(k => [k, p[k]])));
+        }
         let rows = db[table].filter(r => matches(r, q));
+        if (table === 'profili' && !gestisce('iscrizioni')) rows = rows.filter(r => r.id === cur);
         if (me().stato !== 'attivo' && table !== 'profili') rows = [];
         if (table === 'resoconti' && !['senior', 'junior'].includes(me().ruolo)) rows = rows.filter(r => r.atleta_id === cur);
         if (q && q.order) rows = rows.slice().sort((a, b) => (a[q.order] > b[q.order] ? 1 : a[q.order] < b[q.order] ? -1 : 0) * (q.asc === false ? -1 : 1));
