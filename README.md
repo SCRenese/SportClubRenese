@@ -28,7 +28,7 @@ I soci vedono degli altri soci solo nome e cognome; email, telefono, data di nas
 ## Messa online (una volta sola)
 
 1. **Supabase** (gratuito) → nuovo progetto → *SQL Editor* → incolla `supabase-setup.sql` → *Run*.
-2. *Authentication → URL Configuration*: in **Site URL** metti `https://rupi7800-blip.github.io/SpotClubRenese/`.
+2. *Authentication → URL Configuration*: in **Site URL** metti `https://rupi7800-blip.github.io/SportClubRenese/`.
 3. *Project Settings → API*: copia **Project URL** e chiave **anon/publishable** dentro `js/config.js`.
 4. **Primo amministratore senior**: registrati dall'app con la tua email, poi nel *SQL Editor* esegui (con la tua email):
    `update public.profili set ruolo='senior', stato='attivo', perm_allenamenti=true, perm_gare=true, perm_eventi=true where email='tua-email@esempio.it';`
