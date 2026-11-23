@@ -5,7 +5,7 @@
    Le classifiche (data/) arrivano sempre fresche dalla rete. */
 const CACHE = 'screnese-app';
 const ASSETS = [
-  './', './index.html', './css/style.css', './js/config.js', './js/store.js', './js/app.js',
+  './', './index.html', './css/style.css', './js/config.js', './js/store.js', './js/privacy.js', './js/app.js',
   './js/aggiornamenti.js', './js/vendor/supabase.js', './manifest.webmanifest',
   './icons/logo.svg', './icons/icon-32.png', './icons/icon-180.png', './icons/icon-192.png', './icons/icon-512.png'
 ];

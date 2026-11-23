@@ -243,18 +243,16 @@ def classifica_atleti(txt, societa_note):
         if soc in cols:
             cols.remove(soc)
         nome = " ".join(cols).strip()
-        tessera = next((n for n in r["nums"] if re.fullmatch(r"\d{4,}", n)), None)
+        # il numero di tessera è un dato personale (anche di minorenni): lo scarto, non lo pubblico
         mt = re.match(r"^(\d{4,})\s+(.*)$", nome)
         if mt:
-            tessera, nome = tessera or mt.group(1), mt.group(2)
+            nome = mt.group(2)
         if not nome:
             continue
         soc = pulisci_societa(soc or "")
         sez = r["sezione"]
         categoria = sez if sez and (not cat or cat.lower()[:5] in sez.lower()) else (cat or sez or "")
         riga = {"pos": r["pos"], "nome": nome, "societa": soc, "categoria": categoria, "punti": r["punti"]}
-        if tessera:
-            riga["tessera"] = tessera
         out.append(riga)
     return valida(out)
 

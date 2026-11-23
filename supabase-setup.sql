@@ -10,8 +10,27 @@
 --             senior gli ha affidato (iscrizioni, allenamenti, gare, eventi)
 --   socio   = utente: atleta o sostenitore; partecipa alle sezioni
 --             per cui il senior gli ha dato il permesso
--- Il PRIMO account registrato diventa automaticamente amministratore senior.
+-- Nessun account diventa senior da solo: il PRIMO amministratore senior va
+-- creato a mano (vedi il blocco "Primo amministratore senior" in fondo).
+-- Rieseguire questo file aggiorna anche un database già esistente (migrazione).
 -- =====================================================================
+
+-- 0. Pulizia di regole e trigger di versioni precedenti ------------------------
+-- Le regole d'accesso (policy) si sommano: una vecchia regola con un altro nome
+-- riaprirebbe i dati. Le tolgo tutte: sotto vengono ricreate quelle giuste.
+do $$ declare r record; begin
+  for r in select schemaname, tablename, policyname from pg_policies
+           where schemaname = 'public' and tablename in ('profili','attivita','partecipazioni','resoconti','risultati') loop
+    execute format('drop policy %I on %I.%I', r.policyname, r.schemaname, r.tablename);
+  end loop;
+  for r in select t.tgname, c.relname, n.nspname from pg_trigger t
+           join pg_class c on c.oid = t.tgrelid join pg_namespace n on n.oid = c.relnamespace
+           join pg_proc p on p.oid = t.tgfoid join pg_namespace pn on pn.oid = p.pronamespace
+           where not t.tgisinternal and pn.nspname = 'public'
+             and ((n.nspname = 'public' and c.relname in ('profili','partecipazioni')) or (n.nspname = 'auth' and c.relname = 'users')) loop
+    execute format('drop trigger %I on %I.%I', r.tgname, r.nspname, r.relname);
+  end loop;
+end $$;
 
 -- 1. Profili dei soci -----------------------------------------------------
 create table if not exists public.profili (
@@ -37,6 +56,13 @@ create table if not exists public.profili (
   gest_eventi      boolean not null default false,
   creato           timestamptz not null default now()
 );
+
+-- Colonne aggiunte per privacy e minorenni (sicure da rieseguire)
+alter table public.profili add column if not exists tutore_nome       text check (tutore_nome is null or char_length(tutore_nome) <= 80);
+alter table public.profili add column if not exists tutore_contatto   text check (tutore_contatto is null or char_length(tutore_contatto) <= 80);
+alter table public.profili add column if not exists privacy_versione  text check (privacy_versione is null or char_length(privacy_versione) <= 20);
+alter table public.profili add column if not exists privacy_il        timestamptz;
+alter table public.profili add column if not exists consenso_tutore_il timestamptz;  -- impostabile solo da chi gestisce le iscrizioni
 
 -- 2. Funzioni di controllo dei permessi ------------------------------------
 create or replace function public.e_senior() returns boolean
@@ -82,26 +108,34 @@ language sql stable security definer set search_path = public as $$
   );
 $$;
 
+create or replace function public.e_minorenne(nascita date) returns boolean
+language sql stable as $$
+  select nascita is not null and nascita > (current_date - interval '18 years')::date;
+$$;
+
 create or replace function public.sezione_di(tipo_attivita text) returns text
 language sql immutable as $$
   select case tipo_attivita when 'allenamento' then 'allenamenti' when 'gara' then 'gare' when 'evento' then 'eventi' end;
 $$;
 
--- 3. Nuovo account → profilo (il primo diventa senior) -----------------------
+-- 3. Nuovo account → profilo (sempre "socio in attesa") -----------------------
 create or replace function public.nuovo_profilo() returns trigger
 language plpgsql security definer set search_path = public as $$
-declare primo boolean;
+declare m jsonb := coalesce(new.raw_user_meta_data, '{}'::jsonb); dn date;
 begin
-  select not exists (select 1 from profili) into primo;
-  insert into profili (id, email, nome, cognome, ruolo, stato, tipo,
-                       perm_allenamenti, perm_gare, perm_eventi)
+  begin dn := nullif(m->>'data_nascita', '')::date; exception when others then dn := null; end;
+  insert into profili (id, email, nome, cognome, ruolo, stato, tipo, data_nascita,
+                       tutore_nome, tutore_contatto, privacy_versione, privacy_il)
   values (new.id, new.email,
-          coalesce(new.raw_user_meta_data->>'nome', ''),
-          coalesce(new.raw_user_meta_data->>'cognome', ''),
-          case when primo then 'senior' else 'socio' end,
-          case when primo then 'attivo' else 'in_attesa' end,
-          case when (new.raw_user_meta_data->>'tipo') = 'atleta' then 'atleta' else 'sostenitore' end,
-          primo, primo, primo)
+          left(coalesce(m->>'nome', ''), 60),
+          left(coalesce(m->>'cognome', ''), 60),
+          'socio', 'in_attesa',
+          case when (m->>'tipo') = 'atleta' then 'atleta' else 'sostenitore' end,
+          dn,
+          left(nullif(m->>'tutore_nome', ''), 80),
+          left(nullif(m->>'tutore_contatto', ''), 80),
+          left(nullif(m->>'privacy_versione', ''), 20),
+          case when nullif(m->>'privacy_versione', '') is not null then now() end)
   on conflict (id) do nothing;
   return new;
 end $$;
@@ -125,13 +159,40 @@ begin
        or new.gest_gare <> old.gest_gare or new.gest_eventi <> old.gest_eventi then
       raise exception 'Solo l''amministratore senior può cambiare ruoli e permessi';
     end if;
-    if (new.stato <> old.stato or new.scadenza is distinct from old.scadenza) and not puo_gestire('iscrizioni') then
+    if old.ruolo = 'senior' and old.id <> auth.uid() then
+      raise exception 'Solo un amministratore senior può modificare un altro senior';
+    end if;
+    if (new.stato <> old.stato or new.scadenza is distinct from old.scadenza
+        or new.consenso_tutore_il is distinct from old.consenso_tutore_il)
+       and not puo_gestire('iscrizioni') then
       raise exception 'Non hai il permesso di gestire le iscrizioni';
     end if;
+    if not puo_gestire('iscrizioni') then
+      -- prova dell'informativa e del consenso: non riscrivibile dal socio
+      new.privacy_versione := case when old.privacy_versione is not null then old.privacy_versione else new.privacy_versione end;
+      new.privacy_il := old.privacy_il;
+      if old.consenso_tutore_il is not null
+         and (new.tutore_nome, new.tutore_contatto) is distinct from (old.tutore_nome, old.tutore_contatto) then
+        raise exception 'Dopo il consenso i dati del genitore/tutore li modificano solo gli amministratori delle iscrizioni';
+      end if;
+    end if;
     if new.id <> auth.uid() and not puo_gestire('iscrizioni')
-       and (new.nome, new.cognome, new.telefono, new.data_nascita, new.tessera)
-           is distinct from (old.nome, old.cognome, old.telefono, old.data_nascita, old.tessera) then
+       and (new.nome, new.cognome, new.telefono, new.data_nascita, new.tessera, new.tutore_nome, new.tutore_contatto)
+           is distinct from (old.nome, old.cognome, old.telefono, old.data_nascita, old.tessera, old.tutore_nome, old.tutore_contatto) then
       raise exception 'Non puoi modificare i dati di un altro socio';
+    end if;
+  end if;
+  -- dopo l'attivazione solo chi gestisce le iscrizioni può cambiare data di nascita e consenso
+  if old.stato = 'attivo' and new.data_nascita is distinct from old.data_nascita and not puo_gestire('iscrizioni') then
+    raise exception 'La data di nascita può essere modificata solo dagli amministratori delle iscrizioni';
+  end if;
+  -- attivazione: data di nascita nota e, per i minorenni, consenso del genitore
+  if new.stato = 'attivo' and old.stato <> 'attivo' then
+    if new.data_nascita is null then
+      raise exception 'Serve la data di nascita per attivare il socio';
+    end if;
+    if e_minorenne(new.data_nascita) and new.consenso_tutore_il is null then
+      raise exception 'Socio minorenne: registra prima il consenso del genitore o tutore';
     end if;
   end if;
   -- non lasciare il club senza amministratore senior
@@ -150,12 +211,20 @@ alter table public.profili enable row level security;
 drop policy if exists "profili leggi" on public.profili;
 drop policy if exists "profili modifica" on public.profili;
 drop policy if exists "profili elimina" on public.profili;
+-- La tabella completa (email, telefono, nascita, tutore…) la leggono solo il
+-- diretto interessato e chi gestisce le iscrizioni. Gli altri soci vedono la
+-- vista profili_pub (solo nome, cognome e dati non sensibili).
 create policy "profili leggi" on public.profili for select to authenticated
-  using (id = auth.uid() or e_attivo());
+  using (id = auth.uid() or puo_gestire('iscrizioni'));
 create policy "profili modifica" on public.profili for update to authenticated
-  using (id = auth.uid() or e_admin()) with check (id = auth.uid() or e_admin());
+  using (id = auth.uid() or puo_gestire('iscrizioni')) with check (id = auth.uid() or puo_gestire('iscrizioni'));
 create policy "profili elimina" on public.profili for delete to authenticated
   using (e_senior() and id <> auth.uid());
+
+create or replace view public.profili_pub with (security_barrier = true) as
+  select id, nome, cognome, tipo, ruolo, stato, perm_allenamenti, perm_gare, perm_eventi
+  from public.profili
+  where id = auth.uid() or (e_attivo() and stato = 'attivo');
 
 -- 5. Attività: allenamenti, gare, eventi --------------------------------------
 create table if not exists public.attivita (
@@ -205,9 +274,12 @@ create or replace function public.controlla_partecipazione() returns trigger
 language plpgsql security definer set search_path = public as $$
 declare a attivita; occupati int; gestore boolean;
 begin
-  select * into a from attivita where id = new.attivita_id;
+  select * into a from attivita where id = new.attivita_id for update;  -- serializza le iscrizioni: niente posti oltre il limite
   gestore := puo_gestire(sezione_di(a.tipo));
   if auth.uid() is null or gestore then new.aggiornato := now(); return new; end if;
+  if tg_op = 'UPDATE' and (new.attivita_id <> old.attivita_id or new.user_id <> old.user_id) then
+    raise exception 'Non puoi spostare una partecipazione';
+  end if;
   if tg_op = 'UPDATE' and new.presente is distinct from old.presente then
     raise exception 'La presenza viene confermata dagli amministratori';
   end if;
@@ -270,7 +342,7 @@ drop policy if exists "reso crea" on public.resoconti;
 drop policy if exists "reso modifica" on public.resoconti;
 drop policy if exists "reso elimina" on public.resoconti;
 create policy "reso leggi" on public.resoconti for select to authenticated
-  using (atleta_id = auth.uid() or e_admin());
+  using (atleta_id = auth.uid() or puo_gestire('allenamenti'));
 create policy "reso crea" on public.resoconti for insert to authenticated with check (
   puo_gestire('allenamenti') or (atleta_id = auth.uid() and e_attivo()
     and exists (select 1 from profili where id = auth.uid() and tipo = 'atleta')));
@@ -314,8 +386,30 @@ create policy "ris elimina" on public.risultati for delete to authenticated
   using (puo_gestire('gare') or atleta_id = auth.uid());
 
 -- 9. Permessi di base per gli utenti collegati -----------------------------------
+-- Supabase concede di default privilegi larghi a anon/authenticated sui nuovi
+-- oggetti: li togliamo e riassegniamo solo quelli necessari.
+revoke all on public.profili, public.attivita, public.partecipazioni,
+  public.resoconti, public.risultati, public.profili_pub from public, anon;
 grant usage on schema public to authenticated;
 grant select, insert, update, delete on public.profili, public.attivita, public.partecipazioni,
   public.resoconti, public.risultati to authenticated;
+grant select on public.profili_pub to authenticated;
+
+revoke execute on function public.e_senior(), public.e_admin(), public.e_attivo(),
+  public.puo_gestire(text), public.puo_partecipare(text), public.sezione_di(text),
+  public.e_minorenne(date), public.nuovo_profilo(), public.proteggi_profilo(),
+  public.controlla_partecipazione() from public, anon;
 grant execute on function public.e_senior(), public.e_admin(), public.e_attivo(),
-  public.puo_gestire(text), public.puo_partecipare(text), public.sezione_di(text) to authenticated;
+  public.puo_gestire(text), public.puo_partecipare(text), public.sezione_di(text),
+  public.e_minorenne(date) to authenticated;
+
+-- 10. Primo amministratore senior (da fare UNA volta, a mano) ------------------------
+-- 1) registrati dall'app con la tua email (resterai "in attesa");
+-- 2) nel SQL Editor esegui, sostituendo l'email:
+--
+--   update public.profili
+--      set ruolo = 'senior', stato = 'attivo', tipo = 'sostenitore',
+--          perm_allenamenti = true, perm_gare = true, perm_eventi = true
+--    where email = 'tua-email@esempio.it';
+--
+-- (dal SQL Editor il controllo sul minorenne e sulla data di nascita non si applica)

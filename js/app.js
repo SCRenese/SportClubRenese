@@ -28,6 +28,7 @@
   const toLocal = iso => { const d = new Date(iso); return dKey(d) + 'T' + ora(d); };
   const fromParts = (day, time) => new Date(day + 'T' + (time || '00:00')).toISOString();
   const ini = p => ((p.nome || '?')[0] + ((p.cognome || '')[0] || '')).toUpperCase();
+  const minorenne = d => !!d && new Date(String(d).slice(0, 10)) > new Date(new Date().setFullYear(new Date().getFullYear() - 18));
   const nomeP = p => p ? ((p.nome || '') + ' ' + (p.cognome || '')).trim() || p.email || 'Socio' : 'Socio';
   const prof = id => S.profili.find(p => p.id === id);
   const now = () => new Date();
@@ -117,7 +118,8 @@
   async function loadAll() {
     const from = new Date(Date.now() - 400 * 864e5).toISOString();
     const [profili, att, part] = await Promise.all([
-      Store.list('profili', { order: 'cognome' }),
+      // chi gestisce le iscrizioni legge i profili completi; gli altri solo la vista pubblica (nome, cognome, tipo)
+      Store.list(puoGestire('iscrizioni') ? 'profili' : 'profili_pub', { order: 'cognome' }),
       Store.list('attivita', { gte: { inizio: from }, order: 'inizio' }),
       Store.list('partecipazioni')
     ]);
@@ -185,23 +187,34 @@
       '<form id="fa">' +
       (reg ? '<div class="f2"><label class="f"><span>Nome</span><input type="text" name="nome" required maxlength="60" autocomplete="given-name"></label>' +
         '<label class="f"><span>Cognome</span><input type="text" name="cognome" required maxlength="60" autocomplete="family-name"></label></div>' : '') +
+      (reg ? '<label class="f"><span>Data di nascita</span><input type="date" name="data_nascita" required autocomplete="bday"></label>' +
+        '<div id="tutore" hidden><p class="small muted">Sei minorenne: la richiesta va compilata con un genitore o tutore, che ne assume la responsabilità.</p>' +
+        '<div class="f2"><label class="f"><span>Nome del genitore/tutore</span><input type="text" name="tutore_nome" maxlength="80"></label>' +
+        '<label class="f"><span>Telefono o email del genitore/tutore</span><input type="text" name="tutore_contatto" maxlength="80"></label></div></div>' : '') +
       '<label class="f"><span>Email</span><input type="email" name="email" required autocomplete="email"></label>' +
       (rec ? '' : '<label class="f"><span>Password</span><input type="password" name="pw" required minlength="8" autocomplete="' + (reg ? 'new-password' : 'current-password') + '"></label>') +
       (reg ? '<label class="f"><span>Mi iscrivo come</span><select name="tipo"><option value="atleta">Atleta</option><option value="sostenitore">Sostenitore</option></select></label>' +
-        '<p class="small muted">L’amministratore senior confermerà la tua iscrizione e i tuoi permessi.</p>' : '') +
+        '<label class="check"><input type="checkbox" name="privacy" required> Ho letto l’<a href="#" id="pv">informativa privacy</a> (per i minorenni: la dichiara il genitore/tutore)</label>' +
+        '<p class="small muted">L’amministratore confermerà la tua iscrizione e i tuoi permessi.</p>' : '') +
+      (mode === 'login' ? '<p class="small" style="text-align:center;margin:10px 0 0"><a href="#" id="pv">Informativa privacy</a></p>' : '') +
       '<div class="err" id="ae"></div>' +
       '<button class="btn primary block" type="submit">' + (reg ? 'Invia richiesta' : rec ? 'Invia link di recupero' : 'Accedi') + '</button></form>' +
       '<div class="row" style="justify-content:space-between;margin-top:12px">' +
       (mode !== 'login' ? '<button class="btn sm ghost" data-m="login">Ho già un account</button>' : '<button class="btn sm ghost" data-m="reg">Nuova iscrizione</button>') +
       (mode === 'login' ? '<button class="btn sm ghost" data-m="rec">Password dimenticata?</button>' : '') + '</div></div>';
     VIEW().querySelectorAll('[data-m]').forEach(b => b.onclick = () => renderAuth(b.dataset.m));
+    const pv = $('#pv'); if (pv) pv.onclick = e => { e.preventDefault(); modal(mHead('Informativa privacy') + window.PRIVACY.testo()); };
+    const dn = $('#fa [name=data_nascita]');
+    if (dn) dn.oninput = dn.onchange = () => { const mn = minorenne(dn.value); $('#tutore').hidden = !mn; ['tutore_nome', 'tutore_contatto'].forEach(k => { $('#fa [name=' + k + ']').required = mn; }); };
     $('#fa').onsubmit = async e => {
       e.preventDefault();
       const f = new FormData(e.target), el = $('#ae'), btn = e.target.querySelector('button[type=submit]');
       el.textContent = ''; btn.disabled = true;
       try {
         if (reg) {
-          const r = await Store.signUp({ email: f.get('email').trim(), password: f.get('pw'), nome: f.get('nome').trim(), cognome: f.get('cognome').trim(), tipo: f.get('tipo') });
+          const r = await Store.signUp({ email: f.get('email').trim(), password: f.get('pw'), nome: f.get('nome').trim(), cognome: f.get('cognome').trim(), tipo: f.get('tipo'),
+            data_nascita: f.get('data_nascita'), privacy_versione: window.PRIVACY.VERSIONE,
+            tutore_nome: minorenne(f.get('data_nascita')) ? f.get('tutore_nome').trim() : '', tutore_contatto: minorenne(f.get('data_nascita')) ? f.get('tutore_contatto').trim() : '' });
           if (r.needsConfirm) { VIEW().innerHTML = '<div class="auth card"><h1>Controlla l’email</h1><p class="sub">Ti abbiamo inviato un link per confermare l’indirizzo. Dopo la conferma potrai accedere: l’amministratore approverà la tua iscrizione.</p><button class="btn primary block" id="bk">Torna all’accesso</button></div>'; $('#bk').onclick = () => renderAuth(); return; }
         } else if (rec) {
           await Store.resetPassword(f.get('email').trim());
@@ -772,16 +785,21 @@
       '<h2>I miei dati</h2><form class="card" id="fp"><div class="f2"><label class="f"><span>Nome</span><input type="text" name="nome" maxlength="60" value="' + esc(m.nome) + '" required></label>' +
       '<label class="f"><span>Cognome</span><input type="text" name="cognome" maxlength="60" value="' + esc(m.cognome) + '" required></label></div>' +
       '<div class="f2"><label class="f"><span>Telefono</span><input type="tel" name="telefono" maxlength="30" value="' + esc(m.telefono || '') + '"></label>' +
-      '<label class="f"><span>Data di nascita</span><input type="date" name="data_nascita" value="' + esc(m.data_nascita || '') + '"></label></div>' +
+      '<label class="f"><span>Data di nascita</span><input type="date" name="data_nascita" value="' + esc(m.data_nascita || '') + '"' + (m.stato === 'attivo' && m.data_nascita ? ' readonly title="Per modificarla rivolgiti agli amministratori"' : '') + '></label></div>' +
       '<label class="f"><span>N. tessera federale</span><input type="text" name="tessera" maxlength="30" value="' + esc(m.tessera || '') + '"></label>' +
+      (minorenne(m.data_nascita) || m.tutore_nome ? '<div class="f2"><label class="f"><span>Genitore/tutore</span><input type="text" name="tutore_nome" maxlength="80" value="' + esc(m.tutore_nome || '') + '"></label>' +
+        '<label class="f"><span>Contatto genitore/tutore</span><input type="text" name="tutore_contatto" maxlength="80" value="' + esc(m.tutore_contatto || '') + '"></label></div>' : '') +
+      '<p class="small muted">' + (m.privacy_versione ? 'Informativa privacy letta (versione ' + esc(m.privacy_versione) + ')' : 'Informativa privacy') + ': <a href="#" id="pv">leggila</a></p>' +
       '<div class="row end" style="margin-top:12px"><button class="btn primary">Salva</button></div></form>' +
       (Store.mode !== 'demo' ? '<h2>Password</h2><form class="card" id="fpw"><label class="f"><span>Nuova password</span><input type="password" name="pw" minlength="8" required autocomplete="new-password"></label><div class="row end" style="margin-top:12px"><button class="btn">Cambia password</button></div></form>' : '');
     $('#fp').onsubmit = async e => {
       e.preventDefault();
       const f = new FormData(e.target);
       const patch = { nome: f.get('nome').trim(), cognome: f.get('cognome').trim(), telefono: f.get('telefono').trim() || null, data_nascita: f.get('data_nascita') || null, tessera: f.get('tessera').trim() || null };
+      if (f.has('tutore_nome')) Object.assign(patch, { tutore_nome: f.get('tutore_nome').trim() || null, tutore_contatto: f.get('tutore_contatto').trim() || null });
       try { await act(() => Store.update('profili', { id: m.id }, patch), 'Dati salvati'); Object.assign(S.me, patch); const p = prof(m.id); if (p) Object.assign(p, patch); $('#btn-me').textContent = ini(S.me); } catch (er) { /* già mostrato */ }
     };
+    $('#pv').onclick = e => { e.preventDefault(); modal(mHead('Informativa privacy') + window.PRIVACY.testo()); };
     const pw = $('#fpw'); if (pw) pw.onsubmit = async e => { e.preventDefault(); try { await act(() => Store.setPassword(new FormData(e.target).get('pw')), 'Password cambiata'); e.target.reset(); } catch (er) { /* no */ } };
     const lo = $('#lo'); if (lo) lo.onclick = async () => { await Store.signOut(); S.me = null; location.hash = ''; start(); };
     const inst = $('#inst'); if (inst) inst.onclick = async () => { S.installEvt.prompt(); await S.installEvt.userChoice; S.installEvt = null; vProfilo(); };
@@ -927,13 +945,13 @@
       .filter(p => !q || (nomeP(p) + ' ' + (p.email || '')).toLowerCase().includes(q));
     const scad = p => p.scadenza && new Date(p.scadenza + 'T23:59') < now();
     el.innerHTML = (gi && attesa.length ? '<h2 style="margin-top:0">Richieste in attesa <span class="badge blu">' + attesa.length + '</span></h2><div class="card">' + attesa.map(p =>
-      '<div class="person"><span class="ini">' + ini(p) + '</span><div class="who"><b>' + esc(nomeP(p)) + '</b><small>' + esc(p.email || '') + ' · chiede: ' + p.tipo + '</small></div>' +
+      '<div class="person"><span class="ini">' + ini(p) + '</span><div class="who"><b>' + esc(nomeP(p)) + '</b><small>' + esc(p.email || '') + ' · chiede: ' + p.tipo + '</small></div>' + (minorenne(p.data_nascita) ? '<span class="badge no">Minorenne</span>' : '') +
       '<button class="btn sm primary" data-ok="' + p.id + '">Approva</button><button class="btn sm ghost" data-no="' + p.id + '">Rifiuta</button></div>').join('') + '</div>' : '') +
       (!gi ? '<p class="small muted">Puoi consultare l’elenco dei soci. La gestione delle iscrizioni è affidata dall’amministratore senior.</p>' : '') +
       '<div class="row" style="margin:14px 0 10px"><input type="search" id="sq" placeholder="Cerca socio" value="' + esc(u.sociQ || '') + '" style="flex:1;min-width:160px"></div>' +
       '<div class="chips" style="margin-bottom:10px">' + [['tutti', 'Tutti'], ['atleta', 'Atleti'], ['sostenitore', 'Sostenitori'], ['admin', 'Amministratori'], ['sospesi', 'Sospesi']].map(([k, l]) => '<button class="chip' + (f === k ? ' on' : '') + '" data-sf="' + k + '">' + l + '</button>').join('') + '</div>' +
       '<p class="small muted">' + lista.length + ' soci</p><div class="card">' + (lista.length ? lista.map(p =>
-        '<div class="person" data-socio="' + p.id + '" style="cursor:pointer"><span class="ini">' + ini(p) + '</span><div class="who"><b>' + esc(nomeP(p)) + '</b><small>' + p.tipo + (p.ruolo !== 'socio' ? ' · admin ' + p.ruolo : '') + (p.stato === 'sospeso' ? ' · sospeso' : '') + ' · iscritto fino al ' + dataIt(p.scadenza) + '</small></div>' +
+        '<div class="person" data-socio="' + p.id + '" style="cursor:pointer"><span class="ini">' + ini(p) + '</span><div class="who"><b>' + esc(nomeP(p)) + '</b><small>' + p.tipo + (p.ruolo !== 'socio' ? ' · admin ' + p.ruolo : '') + (p.stato === 'sospeso' ? ' · sospeso' : '') + ' · ' + (p.scadenza !== undefined ? 'iscritto fino al ' + dataIt(p.scadenza) : 'socio attivo') + '</small></div>' +
         (scad(p) ? '<span class="badge no">Scaduto</span>' : '') + IC.right.replace('<svg', '<svg style="width:16px;color:var(--muto)"') + '</div>').join('') : '<p class="muted">Nessun socio.</p>') + '</div>';
     const sq = $('#sq'); sq.oninput = () => { u.sociQ = sq.value; clearTimeout(sq._t); sq._t = setTimeout(() => { admSoci(); const n = $('#sq'); n.focus(); n.setSelectionRange(n.value.length, n.value.length); }, 250); };
     el.querySelectorAll('[data-sf]').forEach(b => b.onclick = () => { u.sociF = b.dataset.sf; admSoci(); });
@@ -970,11 +988,20 @@
     return r;
   }
 
+  // casella "consenso del genitore" per i soci minorenni (solo chi gestisce le iscrizioni)
+  function consensoCampi(p) {
+    if (!minorenne(p.data_nascita) || p.consenso_tutore_il) return '';
+    return '<div class="card" style="margin:10px 0"><p class="small" style="margin:0 0 6px"><b>Socio minorenne.</b> Genitore/tutore: ' + esc(p.tutore_nome || 'non indicato') + (p.tutore_contatto ? ' · ' + esc(p.tutore_contatto) : '') + '</p>' +
+      '<label class="check"><input type="checkbox" name="consenso"> Ho ricevuto e verificato il consenso del genitore o tutore</label></div>';
+  }
+
   function openApprova(id) {
     const p = prof(id);
     const fineAnno = new Date().getFullYear() + '-12-31';
     const proposta = Object.assign({}, p, { perm_allenamenti: p.tipo === 'atleta', perm_gare: p.tipo === 'atleta', perm_eventi: true });
     modal(mHead('Approva iscrizione') + '<p class="muted" style="margin-top:0">' + esc(nomeP(p)) + ' · ' + esc(p.email || '') + '</p><form id="fa">' +
+      (p.data_nascita ? '' : '<label class="f"><span>Data di nascita (mancante)</span><input type="date" name="data_nascita" required></label>') +
+      (p.data_nascita ? consensoCampi(p) : '<label class="check"><input type="checkbox" name="consenso"> Se il socio è minorenne: ho verificato il consenso del genitore o tutore</label>') +
       '<label class="f"><span>Iscrizione valida fino al</span><input type="date" name="scadenza" required value="' + fineAnno + '"></label>' +
       (isSenior() ? permCampi(proposta) : '<p class="small muted">Stato richiesto: ' + p.tipo + '. Ruolo e permessi li assegna l’amministratore senior.</p>') +
       '<div class="row end" style="margin-top:14px"><button type="button" class="btn ghost" data-close>Annulla</button><button class="btn primary">Approva</button></div></form>', (m, close) => {
@@ -983,6 +1010,10 @@
         e.preventDefault();
         const f = new FormData(e.target);
         const patch = Object.assign({ stato: 'attivo', scadenza: f.get('scadenza') }, isSenior() ? leggiPerm(f) : {});
+        if (f.get('data_nascita')) patch.data_nascita = f.get('data_nascita');
+        if (f.get('consenso')) patch.consenso_tutore_il = new Date().toISOString();
+        if (!p.data_nascita && !minorenne(patch.data_nascita)) delete patch.consenso_tutore_il;
+        if (minorenne(patch.data_nascita || p.data_nascita) && !patch.consenso_tutore_il && !p.consenso_tutore_il) { toast('Socio minorenne: serve il consenso del genitore o tutore', true); return; }
         if (await saveProfilo(id, patch, 'Iscrizione approvata')) { close(); vAdmin(); }
       };
     });
@@ -994,8 +1025,11 @@
     const n = pres.filter(a => S.part.some(x => x.attivita_id === a.id && x.user_id === id && x.presente)).length;
     modal(mHead(esc(nomeP(p))) + '<div class="badges" style="margin-top:0"><span class="badge navy">' + p.tipo + '</span>' + (p.ruolo !== 'socio' ? '<span class="badge blu">admin ' + p.ruolo + '</span>' : '') + '<span class="badge">' + p.stato.replace('_', ' ') + '</span></div>' +
       '<p class="small">' + esc(p.email || '') + (p.telefono ? ' · <a href="tel:' + esc(p.telefono) + '">' + esc(p.telefono) + '</a>' : '') + (p.tessera ? ' · tessera ' + esc(p.tessera) : '') + (p.data_nascita ? ' · nato/a il ' + dataIt(p.data_nascita) : '') + '</p>' +
+      (gi && (minorenne(p.data_nascita) || p.tutore_nome) ? '<p class="small"><b>Genitore/tutore:</b> ' + esc(p.tutore_nome || '—') + (p.tutore_contatto ? ' · ' + esc(p.tutore_contatto) : '') + ' · ' + (p.consenso_tutore_il ? 'consenso registrato il ' + dataIt(p.consenso_tutore_il) : '<b>consenso non registrato</b>') + '</p>' : '') +
+      (gi && p.privacy_versione ? '<p class="small muted">Informativa privacy v' + esc(p.privacy_versione) + ' del ' + dataIt(p.privacy_il) + '</p>' : '') +
       (p.tipo === 'atleta' ? '<p class="small"><b>Presenze allenamenti (90 gg):</b> ' + n + ' su ' + pres.length + ' · <a href="#scheda/' + p.id + '" data-close>Apri la scheda atleta</a></p>' : '') +
       '<form id="fs">' +
+      (gi ? consensoCampi(p) : '') +
       (gi ? '<div class="f2"><label class="f"><span>Iscrizione</span><select name="stato"><option value="attivo"' + (p.stato === 'attivo' ? ' selected' : '') + '>Attiva</option><option value="sospeso"' + (p.stato === 'sospeso' ? ' selected' : '') + '>Sospesa</option></select></label>' +
         '<label class="f"><span>Valida fino al</span><input type="date" name="scadenza" value="' + esc(p.scadenza || '') + '"></label></div>' : '<p class="small muted">Iscrizione valida fino al ' + dataIt(p.scadenza) + '</p>') +
       (sen ? permCampi(p) : '') +
@@ -1005,6 +1039,7 @@
         e.preventDefault();
         const f = new FormData(e.target);
         const patch = Object.assign({}, gi ? { stato: f.get('stato'), scadenza: f.get('scadenza') || null } : {}, sen ? leggiPerm(f) : {});
+        if (gi && f.get('consenso')) patch.consenso_tutore_il = new Date().toISOString();
         if (patch.ruolo === 'senior' && p.ruolo !== 'senior' && !(await conferma('Nominare ' + esc(nomeP(p)) + ' amministratore senior? Avrà tutti i poteri, compreso togliere i tuoi.', 'Nomina'))) return;
         if (await saveProfilo(id, patch, 'Socio aggiornato')) { close(); if (id === S.me.id) { await refreshMe(); start(); } else vAdmin(); }
       };
