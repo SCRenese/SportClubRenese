@@ -221,3 +221,18 @@ input:focus, select:focus, textarea:focus { border-color: var(--blu); box-shadow
 .bar { height: 8px; border-radius: 4px; background: var(--azzurro); overflow: hidden; }
 .bar i { display: block; height: 100%; background: var(--blu); border-radius: 4px; }
 @media (max-width: 380px) { .tabbar a span { font-size: 9.5px; } h1 { font-size: 26px; } .f3 { grid-template-columns: 1fr 1fr; } }
+
+/* Statistiche e grafici (una serie per grafico, blu del club) */
+.stat small { display: block; font-size: 11.5px; margin-top: 2px; }
+.chart h3 { margin: 0 0 2px; }
+.chart svg { width: 100%; height: auto; display: block; }
+.chart svg text { fill: var(--muto); font-size: 10px; font-family: inherit; }
+.chart svg text.d { fill: var(--testo); font-weight: 700; }
+.chart svg .g { stroke: var(--linea); stroke-width: 1; }
+.chart svg .b { fill: var(--blu); }
+.chart svg .l { fill: none; stroke: var(--blu); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.chart svg .p { fill: var(--blu); stroke: #fff; stroke-width: 2; }
+.chart svg .p.pr { fill: var(--cielo); }
+.chart svg rect:hover { fill: rgba(20, 86, 200, .08); }
+.dati summary { cursor: pointer; font-size: 12.5px; color: var(--muto); margin-top: 6px; }
+.nota-box textarea { width: 100%; min-height: 56px; }

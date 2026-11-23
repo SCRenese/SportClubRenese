@@ -147,8 +147,14 @@ create trigger su_nuovo_utente after insert on auth.users
 -- 4. Protezione dei campi riservati ------------------------------------------
 create or replace function public.proteggi_profilo() returns trigger
 language plpgsql security definer set search_path = public as $$
+declare accetta boolean;
 begin
   if auth.uid() is null then return new; end if;          -- SQL Editor / servizio
+  -- accettazione di una nuova versione dell'informativa: la può dare solo l'interessato
+  -- per sé stesso, e la data la mette il database
+  accetta := new.id = auth.uid() and new.privacy_versione is not null
+             and new.privacy_versione is distinct from old.privacy_versione;
+  if accetta then new.privacy_il := now(); end if;
   if new.id <> old.id or new.email is distinct from old.email then
     raise exception 'Campo non modificabile';
   end if;
@@ -169,8 +175,10 @@ begin
     end if;
     if not puo_gestire('iscrizioni') then
       -- prova dell'informativa e del consenso: non riscrivibile dal socio
-      new.privacy_versione := case when old.privacy_versione is not null then old.privacy_versione else new.privacy_versione end;
-      new.privacy_il := old.privacy_il;
+      if not accetta then
+        new.privacy_versione := old.privacy_versione;
+        new.privacy_il := old.privacy_il;
+      end if;
       if old.consenso_tutore_il is not null
          and (new.tutore_nome, new.tutore_contatto) is distinct from (old.tutore_nome, old.tutore_contatto) then
         raise exception 'Dopo il consenso i dati del genitore/tutore li modificano solo gli amministratori delle iscrizioni';
@@ -358,6 +366,8 @@ create table if not exists public.resoconti (
   autore_id   uuid default auth.uid() references public.profili(id) on delete set null,
   creato      timestamptz not null default now()
 );
+-- peso o carico in kg (palestra, pesi), per seguire i progressi
+alter table public.resoconti add column if not exists peso_kg numeric(5,1) check (peso_kg is null or peso_kg between 0 and 500);
 create index if not exists resoconti_atleta_idx on public.resoconti (atleta_id, data desc);
 
 alter table public.resoconti enable row level security;
