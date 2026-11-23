@@ -1,7 +1,12 @@
 {
-  "version": "1.1.0",
+  "version": "1.3.0",
   "date": "23/11/2026",
   "notes": [
+    "Statistiche e record personali per ogni atleta: grafici di km, passo e pesi, record di allenamento e di gara",
+    "Gli atleti registrano tempi, distanze e pesi dei propri allenamenti",
+    "Nota personale sulle iscrizioni; nuova accettazione dell’informativa al primo accesso",
+    "Le note personali nelle iscrizioni sono visibili solo a te e agli amministratori",
+    "Posizioni e tempi di gara li inseriscono solo gli amministratori delle gare",
     "Privacy: i soci vedono solo nome e cognome degli altri soci",
     "Iscrizione con data di nascita, informativa e consenso del genitore per i minorenni",
     "Classifiche senza numeri di tessera; nessun carattere caricato da Google"

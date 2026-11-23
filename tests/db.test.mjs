@@ -126,6 +126,51 @@ await db.exec(`create policy "vecchia leggi tutti" on profili for select to auth
 await db.exec(SQL);
 check('la migrazione toglie le policy vecchie', (await db.query(`select 1 from pg_policies where policyname='vecchia leggi tutti'`)).rows.length === 0);
 
+// 6b. sprint 2: note, risultati, autore
+const att3 = (await db.query(`insert into attivita (tipo, ambiente, titolo, inizio) values ('allenamento','indoor','Note','2030-01-01') returning id`)).rows[0].id;
+await db.exec(`insert into partecipazioni (attivita_id, user_id, risposta, nota) values ('${att3}','${A}','si','nota privata di Anna')`);
+r = await u(B, `select * from partecipazioni where attivita_id=$1`, [att3]);
+check('un altro socio non legge le note altrui dalla tabella', r.rows?.length === 0, JSON.stringify(r));
+r = await u(A, `select nota from partecipazioni where attivita_id=$1`, [att3]);
+check('l’interessato legge la propria nota', r.rows?.[0]?.nota === 'nota privata di Anna', JSON.stringify(r));
+r = await u(J, `select nota from partecipazioni where attivita_id=$1`, [att3]);
+check('il gestore della sezione legge le note', r.rows?.[0]?.nota === 'nota privata di Anna', JSON.stringify(r));
+r = await u(B, `select * from partecipazioni_pub where attivita_id=$1`, [att3]);
+check('la vista pubblica mostra la risposta ma non la nota', r.rows?.length === 1 && !('nota' in r.rows[0]), JSON.stringify(r));
+
+const gara = (await db.query(`insert into attivita (tipo, titolo, inizio) values ('gara','Regata','2030-02-01') returning id`)).rows[0].id;
+r = await u(A, `insert into risultati (atleta_id, attivita_id, gara, posizione, tempo) values ($1,$2,'Regata',1,'4:00.0')`, [A, gara]);
+check('l’atleta non inventa un risultato', !!r.err, JSON.stringify(r));
+r = await u(J, `insert into risultati (atleta_id, attivita_id, gara, posizione) values ($1,$2,'Regata',1)`, [A, gara]);
+check('un junior senza gestione gare non inserisce risultati', !!r.err, JSON.stringify(r));
+r = await u(S, `insert into risultati (atleta_id, attivita_id, gara, posizione, tempo, autore_id) values ($1,$2,'Regata',2,'4:10.0',$3) returning autore_id`, [A, gara, B]);
+check('il senior inserisce il risultato e l’autore non si falsifica', r.rows?.[0]?.autore_id === S, JSON.stringify(r));
+const risId = (await db.query(`select id from risultati limit 1`)).rows[0].id;
+r = await u(A, `update risultati set posizione=1 where id=$1`, [risId]);
+check('l’atleta non modifica la propria posizione', !r.err && r.n === 0, JSON.stringify(r));
+r = await u(S, `update risultati set autore_id=$2 where id=$1 returning autore_id`, [risId, B]);
+check('l’autore non si cambia in modifica', r.rows?.[0]?.autore_id === S, JSON.stringify(r));
+r = await u(A, `insert into resoconti (atleta_id, lavoro, autore_id) values ($1,'6x500',$2) returning autore_id`, [A, B]);
+check('resoconto: autore forzato a chi inserisce', r.rows?.[0]?.autore_id === A, JSON.stringify(r));
+r = await u(J, `insert into attivita (tipo, ambiente, titolo, inizio, creato_da) values ('allenamento','indoor','X','2030-03-01',$1) returning creato_da`, [B]);
+check('attività: creato_da forzato a chi crea', r.rows?.[0]?.creato_da === J, JSON.stringify(r));
+
+// 6c. accettazione dell'informativa e peso nei resoconti
+r = await u(A, `update profili set privacy_versione='2.0' where id=$1 returning privacy_versione, privacy_il`, [A]);
+check('il socio accetta la nuova informativa e la data la mette il database', r.rows?.[0]?.privacy_versione === '2.0' && !!r.rows?.[0]?.privacy_il, JSON.stringify(r));
+r = await u(A, `update profili set privacy_il='2000-01-01' where id=$1 returning privacy_il`, [A]);
+check('la data di accettazione non si riscrive', r.rows?.[0]?.privacy_il && new Date(r.rows[0].privacy_il).getFullYear() > 2000, JSON.stringify(r));
+r = await u(B, `update profili set privacy_versione='9.9' where id=$1`, [A]);
+check('nessuno accetta l’informativa al posto di un altro', !!r.err || r.n === 0, JSON.stringify(r));
+r = await u(A, `insert into resoconti (atleta_id, lavoro, peso_kg) values ($1,'Squat',62.5) returning peso_kg`, [A]);
+check('l’atleta registra il peso/carico', Number(r.rows?.[0]?.peso_kg) === 62.5, JSON.stringify(r));
+r = await u(A, `insert into resoconti (atleta_id, lavoro, peso_kg) values ($1,'Squat',900)`, [A]);
+check('peso fuori limite rifiutato', !!r.err, JSON.stringify(r));
+r = await u(A, `insert into resoconti (atleta_id, lavoro, distanza_m, durata, passo_500) values ($1,'6x500',3000,'12:30','1:52.4') returning id`, [A]);
+check('l’atleta inserisce il proprio resoconto (tempi, distanze)', !!r.rows?.[0]?.id, JSON.stringify(r));
+r = await u(B, `select id from resoconti where atleta_id=$1`, [A]);
+check('un altro atleta non legge i resoconti altrui', r.rows?.length === 0, JSON.stringify(r));
+
 // 7. dati pubblici
 const cj = JSON.parse(readFileSync(new URL('../data/classifiche.json', import.meta.url), 'utf8'));
 check('classifiche.json senza numeri di tessera', !JSON.stringify(cj).includes('"tessera"'));

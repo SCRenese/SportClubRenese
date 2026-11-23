@@ -121,7 +121,7 @@
       // chi gestisce le iscrizioni legge i profili completi; gli altri solo la vista pubblica (nome, cognome, tipo)
       Store.list(puoGestire('iscrizioni') ? 'profili' : 'profili_pub', { order: 'cognome' }),
       Store.list('attivita', { gte: { inizio: from }, order: 'inizio' }),
-      Store.list('partecipazioni')
+      Store.list('partecipazioni_pub')   // risposte e presenze, senza le note personali
     ]);
     S.profili = profili; S.att = att; S.part = part;
   }
@@ -157,12 +157,30 @@
     if (!Store.user()) return renderAuth();
     try { await refreshMe(); } catch (e) { VIEW().innerHTML = '<div class="empty">' + esc(errMsg(e)) + '</div>'; return; }
     if (!S.me) { VIEW().innerHTML = '<div class="empty">Profilo non trovato. Se hai appena configurato il database, esci e registrati di nuovo.<br><br><button class="btn" id="lo">Esci</button></div>'; $('#lo').onclick = () => Store.signOut().then(start); return; }
+    if (Store.mode !== 'demo' && S.me.privacy_versione !== window.PRIVACY.VERSIONE) return renderInformativa();
     if (S.me.stato !== 'attivo') return renderAttesa();
     $('#tabbar').hidden = false;
     const b = $('#btn-me'); b.hidden = false; b.textContent = ini(S.me);
     try { await loadAll(); } catch (e) { toast(errMsg(e), true); }
     render();
     loadClassifiche().then(() => { const v = currentView(); if (v === 'home' || v === 'classifiche') render(); });
+  }
+
+  // Prima di usare l'app ogni socio deve aver letto e accettato la versione corrente dell'informativa
+  function renderInformativa() {
+    $('#tabbar').hidden = true; $('#btn-me').hidden = true;
+    const nuova = !!S.me.privacy_versione;
+    VIEW().innerHTML = '<div class="card"><h2 style="margin-top:0">' + (nuova ? 'Informativa privacy aggiornata' : 'Informativa privacy') + '</h2>' +
+      '<p class="muted">' + (nuova ? 'L’informativa è cambiata: leggila e conferma per continuare.' : 'Per usare l’app devi leggere e accettare l’informativa.') + '</p>' +
+      '<div style="max-height:45vh;overflow:auto;border:1px solid var(--linea);border-radius:12px;padding:0 12px">' + window.PRIVACY.testo() + '</div>' +
+      '<label class="check" style="margin-top:12px"><input type="checkbox" id="pvok"> Ho letto l’informativa (per i minorenni: la dichiara il genitore/tutore)</label>' +
+      '<div class="err" id="pve"></div><div class="row" style="margin-top:12px"><button class="btn ghost" id="pvno">Esci</button><span class="spacer"></span><button class="btn primary" id="pvsi">Accetto e continuo</button></div></div>';
+    $('#pvno').onclick = () => Store.signOut().then(start);
+    $('#pvsi').onclick = async () => {
+      if (!$('#pvok').checked) { $('#pve').textContent = 'Spunta la casella per continuare.'; return; }
+      try { await Store.update('profili', { id: S.me.id }, { privacy_versione: window.PRIVACY.VERSIONE }); start(); }
+      catch (e) { $('#pve').textContent = errMsg(e); }
+    };
   }
 
   function demoBar() {
@@ -340,6 +358,13 @@
     const s = SEZ[a.tipo], gest = puoGestire(s), ps = partsOf(a);
     let ris = [];
     if (a.tipo === 'gara') { try { ris = await Store.list('risultati', { eq: { attivita_id: a.id }, order: 'posizione' }); } catch (e) { /* no */ } }
+    // note personali: le leggono solo l'interessato e chi gestisce la sezione (la lista pubblica non le contiene)
+    let note = [];
+    if (myPart(a) || gest) { try { note = await Store.list('partecipazioni', { eq: { attivita_id: a.id } }); } catch (e) { /* no */ } }
+    const miaNota = (note.find(n => n.user_id === S.me.id) || {}).nota || '';
+    const notaHtml = (myPart(a) && puoRispondere(a) ? '<div class="nota-box" style="margin-top:12px"><label class="f"><span>La tua nota (la vedi tu e chi organizza)</span><textarea id="nota" maxlength="300" placeholder="Es. arrivo in ritardo, porto un ospite…">' + esc(miaNota) + '</textarea></label><button class="btn sm" id="nota-ok">Salva nota</button></div>'
+      : miaNota ? '<p class="small"><b>La tua nota:</b> ' + esc(miaNota) + '</p>' : '') +
+      (gest && note.some(n => n.nota && n.user_id !== S.me.id) ? '<h3 style="margin-top:12px">Note dei partecipanti</h3>' + note.filter(n => n.nota && n.user_id !== S.me.id).map(n => '<p class="small" style="margin:4px 0"><b>' + esc(nomeP(prof(n.user_id))) + ':</b> ' + esc(n.nota) + '</p>').join('') : '');
     const html = mHead(esc(a.titolo)) + '<div data-detail="' + a.id + '">' +
       '<div class="badges" style="margin-top:0"><span class="badge navy"><i class="dot d-' + classe(a) + '" style="background:#fff"></i> ' + nomeTipo(a) + '</span></div>' +
       badgesHtml(a) +
@@ -349,7 +374,7 @@
       (a.programma ? '<h3 style="margin-top:12px">Programma</h3><div class="programma">' + esc(a.programma) + '</div>' : '') +
       (a.descrizione ? '<p>' + esc(a.descrizione).replace(/\n/g, '<br>') + '</p>' : '') +
       (a.link ? '<p><a href="' + esc(a.link) + '" target="_blank" rel="noopener">' + IC.link.replace('<svg', '<svg style="width:15px;height:15px;vertical-align:-2px"') + ' Informazioni utili</a></p>' : '') +
-      rsvpHtml(a) +
+      rsvpHtml(a) + notaHtml +
       (a.tipo === 'gara' ? '<h3 style="margin-top:14px">Risultati</h3>' + (ris.length ? '<div class="table-wrap"><table><tr><th>Pos.</th><th>Atleta</th><th>Barca / cat.</th><th class="num">Tempo</th></tr>' +
         ris.map(r => '<tr><td>' + (r.posizione ? r.posizione + 'º' : '—') + '</td><td>' + esc(nomeP(prof(r.atleta_id))) + '</td><td>' + esc([r.barca, r.categoria].filter(Boolean).join(' · ')) + '</td><td class="num">' + esc(r.tempo || '') + '</td></tr>').join('') + '</table></div>'
         : '<p class="muted small">Nessun risultato inserito.</p>') : '') +
@@ -364,6 +389,11 @@
     modal(html, (m, close) => {
       const on = (sel, fn) => { const el = m.querySelector(sel); if (el) el.onclick = fn; };
       m.querySelectorAll('[data-rsvp]').forEach(b => b.onclick = () => { close(); setRsvp(b.dataset.id, b.dataset.rsvp); });
+      on('#nota-ok', async () => {
+        const mp = myPart(a), testo = (m.querySelector('#nota').value || '').trim() || null;
+        try { await Store.upsert('partecipazioni', { attivita_id: a.id, user_id: S.me.id, risposta: mp.risposta, nota: testo }, 'attivita_id,user_id'); toast('Nota salvata'); }
+        catch (er) { toast(errMsg(er), true); }
+      });
       on('#ics', () => downloadIcs(a));
       on('#tosch', () => { close(); openResoconto({ atleta_id: S.me.id, attivita_id: a.id, data: dKey(a.inizio), ambiente: a.ambiente, lavoro: a.titolo }); });
       on('#pres', () => { close(); openPresenze(a.id); });
@@ -821,7 +851,7 @@
     if (currentView() !== 'scheda') return;
     const u = S.ui;
     const modReso = puoGestire('allenamenti') || (id === S.me.id && isAtleta());
-    const modRis = puoGestire('gare') || (id === S.me.id && isAtleta());
+    const modRis = puoGestire('gare');   // posizioni e tempi: solo i gestori delle gare
     const t = now(), d30 = new Date(t - 30 * 864e5);
     const all30 = S.att.filter(x => x.tipo === 'allenamento' && new Date(x.inizio) < t && new Date(x.inizio) >= d30);
     const pres30 = all30.filter(x => S.part.some(p => p.attivita_id === x.id && p.user_id === id && p.presente)).length;
@@ -833,18 +863,19 @@
       (isAdmin() && atleti.length ? '<select id="sa" style="margin-bottom:12px">' + atleti.map(p => '<option value="' + p.id + '"' + (p.id === id ? ' selected' : '') + '>' + esc(nomeP(p)) + '</option>').join('') + '</select>' : '') +
       '<div class="grid2"><div class="stat"><b>' + pres30 + '/' + all30.length + '</b><span>Presenze confermate (30 gg)</span></div><div class="stat"><b>' + r30.length + '</b><span>Sedute registrate (30 gg)</span></div>' +
       '<div class="stat"><b>' + km30.toFixed(1).replace('.', ',') + '</b><span>Km registrati (30 gg)</span></div><div class="stat"><b>' + (passi[0] ? esc(passi[0].p) : '—') + '</b><span>Miglior passo /500 m</span></div></div>' +
-      '<div class="tabs-line"><button data-t="allenamenti" class="' + (u.schedaTab === 'allenamenti' ? 'on' : '') + '">Allenamenti (' + reso.length + ')</button><button data-t="gare" class="' + (u.schedaTab === 'gare' ? 'on' : '') + '">Gare (' + ris.length + ')</button></div>' +
+      '<div class="tabs-line"><button data-t="allenamenti" class="' + (u.schedaTab === 'allenamenti' ? 'on' : '') + '">Allenamenti (' + reso.length + ')</button><button data-t="gare" class="' + (u.schedaTab === 'gare' ? 'on' : '') + '">Gare (' + ris.length + ')</button><button data-t="statistiche" class="' + (u.schedaTab === 'statistiche' ? 'on' : '') + '">Statistiche e record</button></div>' +
       (u.schedaTab === 'allenamenti' ?
         '<div class="row" style="margin-bottom:10px">' + segHtml('amb', u.schedaAmb, [['tutti', 'Tutti'], ['indoor', 'Indoor'], ['outdoor', 'Outdoor']]) + '<span class="spacer"></span>' + (modReso ? '<button class="btn primary sm" id="add">' + IC.plus + 'Resoconto</button>' : '') + '</div>' +
         (filt.length ? '<div class="stack">' + filt.map(r => '<div class="card" data-reso="' + r.id + '" style="cursor:' + (modReso ? 'pointer' : 'default') + '"><div class="row"><i class="dot d-' + (r.ambiente || 'indoor') + '"></i><b>' + esc(r.lavoro) + '</b><span class="spacer"></span><small class="muted">' + dataIt(r.data) + '</small></div>' +
-          '<div class="meta">' + [r.distanza_m ? (r.distanza_m >= 1000 ? (r.distanza_m / 1000).toFixed(1).replace('.', ',') + ' km' : r.distanza_m + ' m') : '', r.durata ? 'tempo ' + r.durata : '', r.passo_500 ? r.passo_500 + '/500 m' : '', r.colpi_min ? r.colpi_min + ' colpi/min' : '', r.fc_media ? 'FC ' + r.fc_media : '', r.rpe ? 'RPE ' + r.rpe : ''].filter(Boolean).map(x => '<span>' + esc(x) + '</span>').join('') + '</div>' +
+          '<div class="meta">' + [r.distanza_m ? (r.distanza_m >= 1000 ? (r.distanza_m / 1000).toFixed(1).replace('.', ',') + ' km' : r.distanza_m + ' m') : '', r.durata ? 'tempo ' + r.durata : '', r.passo_500 ? r.passo_500 + '/500 m' : '', r.peso_kg ? String(r.peso_kg).replace('.', ',') + ' kg' : '', r.colpi_min ? r.colpi_min + ' colpi/min' : '', r.fc_media ? 'FC ' + r.fc_media : '', r.rpe ? 'RPE ' + r.rpe : ''].filter(Boolean).map(x => '<span>' + esc(x) + '</span>').join('') + '</div>' +
           (r.risultato ? '<div class="badges"><span class="badge ok">' + esc(r.risultato) + '</span></div>' : '') + (r.note ? '<p class="small" style="margin:6px 0 0">' + esc(r.note) + '</p>' : '') +
           (r.autore_id && r.autore_id !== id ? '<p class="small muted" style="margin:4px 0 0">Inserito da ' + esc(nomeP(prof(r.autore_id))) + '</p>' : '') + '</div>').join('') + '</div>' : '<div class="empty">Nessun resoconto. ' + (modReso ? 'Aggiungi il primo con “Resoconto”.' : '') + '</div>')
-        :
+        : u.schedaTab === 'gare' ?
         '<div class="row end" style="margin-bottom:10px">' + (modRis ? '<button class="btn primary sm" id="addg">' + IC.plus + 'Risultato</button>' : '') + '</div>' +
         (ris.length ? '<div class="table-wrap"><table><tr><th>Data</th><th>Gara</th><th>Barca / cat.</th><th class="num">Pos.</th><th class="num">Tempo</th></tr>' +
           ris.map(r => '<tr data-ris="' + r.id + '" style="cursor:' + (modRis ? 'pointer' : 'default') + '"><td>' + dataIt(r.data) + '</td><td>' + esc(r.gara) + (r.specialita ? '<br><small class="muted">' + esc(r.specialita) + '</small>' : '') + '</td><td>' + esc([r.barca, r.categoria].filter(Boolean).join(' · ')) + '</td><td class="num">' + (r.posizione ? '<b>' + r.posizione + 'º</b>' : '—') + '</td><td class="num">' + esc(r.tempo || '') + '</td></tr>').join('') + '</table></div>'
-          : '<div class="empty">Nessun risultato di gara.</div>'));
+          : '<div class="empty">Nessun risultato di gara.</div>')
+        : window.STAT.html(reso, ris));
     const sa = $('#sa'); if (sa) sa.onchange = () => { location.hash = '#scheda/' + sa.value; };
     VIEW().querySelectorAll('[data-t]').forEach(b => b.onclick = () => { u.schedaTab = b.dataset.t; vScheda(id); });
     bindSeg('amb', v => { u.schedaAmb = v; vScheda(id); });
@@ -864,6 +895,7 @@
       '<div class="f3"><label class="f"><span>Distanza (m)</span><input type="number" name="distanza_m" min="0" value="' + esc(r.distanza_m || '') + '"></label>' +
       '<label class="f"><span>Tempo</span><input type="text" name="durata" maxlength="20" value="' + esc(r.durata || '') + '" placeholder="45:00"></label>' +
       '<label class="f"><span>Passo /500 m</span><input type="text" name="passo_500" maxlength="20" value="' + esc(r.passo_500 || '') + '" placeholder="1:52.4"></label></div>' +
+      '<label class="f"><span>Peso / carico (kg)</span><input type="number" name="peso_kg" min="0" max="500" step="0.5" value="' + esc(r.peso_kg || '') + '" placeholder="Es. 60 (palestra, pesi)"></label>' +
       '<div class="f3"><label class="f"><span>Colpi/min</span><input type="number" name="colpi_min" min="0" max="80" value="' + esc(r.colpi_min || '') + '"></label>' +
       '<label class="f"><span>FC media</span><input type="number" name="fc_media" min="30" max="230" value="' + esc(r.fc_media || '') + '"></label>' +
       '<label class="f"><span>Fatica (RPE 1-10)</span><input type="number" name="rpe" min="1" max="10" value="' + esc(r.rpe || '') + '"></label></div>' +
@@ -875,7 +907,7 @@
         e.preventDefault();
         const f = new FormData(e.target), n = k => f.get(k) ? parseInt(f.get(k), 10) : null, s = k => (f.get(k) || '').trim() || null;
         const row = { atleta_id: r.atleta_id, attivita_id: r.attivita_id || null, data: f.get('data'), ambiente: f.get('ambiente'), lavoro: s('lavoro'),
-          distanza_m: n('distanza_m'), durata: s('durata'), passo_500: s('passo_500'), colpi_min: n('colpi_min'), fc_media: n('fc_media'), rpe: n('rpe'), risultato: s('risultato'), note: s('note') };
+          distanza_m: n('distanza_m'), durata: s('durata'), passo_500: s('passo_500'), peso_kg: f.get('peso_kg') ? parseFloat(f.get('peso_kg')) : null, colpi_min: n('colpi_min'), fc_media: n('fc_media'), rpe: n('rpe'), risultato: s('risultato'), note: s('note') };
         try {
           if (nuovo) await Store.insert('resoconti', row); else await Store.update('resoconti', { id: r.id }, row);
           close(); toast('Resoconto salvato'); if (currentView() === 'scheda') vScheda(r.atleta_id); else location.hash = '#scheda';
