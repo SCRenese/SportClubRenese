@@ -167,6 +167,7 @@
       if (table === 'attivita' && !gestisce(sez(row.tipo || (old && old.tipo)))) nega('Non hai il permesso di gestire questa sezione');
       if (table === 'partecipazioni') {
         const a = db.attivita.find(x => x.id === (row.attivita_id || old.attivita_id));
+        if (!a) nega('Attività non trovata');
         const s = sez(a.tipo);
         if (gestisce(s)) return;
         if ((row.user_id || old.user_id) !== p.id || !partecipa(s)) nega('Non hai il permesso di partecipare a questa sezione');

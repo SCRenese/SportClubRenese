@@ -39,7 +39,7 @@
   function records(reso, ris) {
     const a = {};
     const p = migliore(reso, r => sec(r.passo_500), false);
-    if (p) a.passo = { testo: fmt(p.v) + ' /500 m', data: p.r.data, lavoro: p.r.lavoro, id: p.r.id };
+    if (p) a.passo = { testo: fmt(p.v, 1) + ' /500 m', data: p.r.data, lavoro: p.r.lavoro, id: p.r.id };
     const d = migliore(reso, r => num(r.distanza_m), true);
     if (d && d.v > 0) a.distanza = { testo: d.v >= 1000 ? it(d.v / 1000) + ' km' : d.v + ' m', data: d.r.data, lavoro: d.r.lavoro, id: d.r.id };
     const t = migliore(reso, r => sec(r.durata), true);
@@ -54,7 +54,7 @@
       if (!gruppi[k] || v < gruppi[k].v) gruppi[k] = { v, r, n: 0 };
       gruppi[k].n++;
     });
-    const gare = Object.keys(gruppi).sort().map(k => ({ chiave: k, testo: fmt(gruppi[k].v), data: gruppi[k].r.data, gara: gruppi[k].r.gara, n: gruppi[k].n, id: gruppi[k].r.id }));
+    const gare = Object.keys(gruppi).sort().map(k => ({ chiave: k, testo: fmt(gruppi[k].v, 1), data: gruppi[k].r.data, gara: gruppi[k].r.gara, n: gruppi[k].n, id: gruppi[k].r.id }));
     const pos = ris.map(r => num(r.posizione)).filter(x => x);
     const tot = { gare: ris.length, ori: pos.filter(x => x === 1).length, podi: pos.filter(x => x <= 3).length, migliorPos: pos.length ? Math.min.apply(null, pos) : null };
     return { allenamenti: a, gare, tot };
