@@ -5,8 +5,8 @@
    Finché sono vuoti l'app funziona in MODALITÀ PROVA con dati di esempio
    salvati solo su questo dispositivo. */
 window.SCR_CONFIG = {
-  SUPABASE_URL: '',
-  SUPABASE_KEY: '',
+  SUPABASE_URL: 'https://iaixwcjlozwiirjsqyfz.supabase.co',
+  SUPABASE_KEY: 'sb_publishable_jRy-lIpKB8OSemOU_1qXLg_JY4J8Z7H',
   CLUB: 'Sport Club Renese',
   CLUB_BREVE: 'SC Renese',
   // parole usate per riconoscere il club nelle classifiche federali

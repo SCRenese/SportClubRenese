@@ -109,12 +109,12 @@ language sql stable security definer set search_path = public as $$
 $$;
 
 create or replace function public.e_minorenne(nascita date) returns boolean
-language sql stable as $$
+language sql stable set search_path = public as $$
   select nascita is not null and nascita > (current_date - interval '18 years')::date;
 $$;
 
 create or replace function public.sezione_di(tipo_attivita text) returns text
-language sql immutable as $$
+language sql immutable set search_path = public as $$
   select case tipo_attivita when 'allenamento' then 'allenamenti' when 'gara' then 'gare' when 'evento' then 'eventi' end;
 $$;
 
@@ -441,6 +441,9 @@ revoke execute on function public.e_senior(), public.e_admin(), public.e_attivo(
 grant execute on function public.e_senior(), public.e_admin(), public.e_attivo(),
   public.puo_gestire(text), public.puo_partecipare(text), public.sezione_di(text),
   public.e_minorenne(date) to authenticated;
+-- le funzioni dei trigger non devono essere richiamabili dall'API
+revoke execute on function public.nuovo_profilo(), public.proteggi_profilo(),
+  public.controlla_partecipazione(), public.forza_autore() from authenticated;
 
 -- 10. Primo amministratore senior (da fare UNA volta, a mano) ------------------------
 -- 1) registrati dall'app con la tua email (resterai "in attesa");
