@@ -13818,6 +13818,12 @@
  ],
  "notizie": [
   {
+   "titolo": "La FICSF contro la violenza di genere",
+   "url": "https://ficsf.it/2026/11/la-ficsf-contro-la-violenza-di-genere/",
+   "data": "2026-11-25",
+   "club": false
+  },
+  {
    "titolo": "Cassone di Malcesine: domenica 13 dicembre la prima regata di S. Lucia",
    "url": "https://ficsf.it/2026/11/cassone-di-malcesine-domenica-13-dicembre-la-prima-regata-di-s-lucia/",
    "data": "2026-11-23",
@@ -13884,12 +13890,6 @@
    "club": false
   },
   {
-   "titolo": "Taranto tra Sport e Solidarietà con il Palio in Rosa",
-   "url": "https://ficsf.it/2026/10/taranto-tra-sport-e-solidarieta-con-il-palio-in-rosa/",
-   "data": "2026-10-30",
-   "club": false
-  },
-  {
    "titolo": "Gran Fondo Jole Elba: tutti i vincitori della gara di Porto Ceresio",
    "url": "https://ficsf.it/2026/10/gran-fondo-jole-elba-tutti-i-vincitori-della-gara-di-porto-ceresio/",
    "data": "2026-10-26",
@@ -13941,6 +13941,6 @@
  "pagina": "https://ficsf.it/classifiche/classifiche-2026/",
  "stato": "ok",
  "messaggio": "",
- "aggiornato": "2026-11-24T05:32:59+00:00",
- "controllato": "2026-11-24T05:32:59+00:00"
+ "aggiornato": "2026-11-26T05:34:18+00:00",
+ "controllato": "2026-11-26T05:34:18+00:00"
 }
