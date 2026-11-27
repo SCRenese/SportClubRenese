@@ -13818,6 +13818,18 @@
  ],
  "notizie": [
   {
+   "titolo": "Corso formazione allenatori primo livello F.I.C.S.F. 2026",
+   "url": "https://ficsf.it/2026/11/corso-formazione-allenatori-primo-livello-f-i-c-s-f-2026/",
+   "data": "2026-11-26",
+   "club": false
+  },
+  {
+   "titolo": "La Spezia: il bando del 24° Trofeo di Natale",
+   "url": "https://ficsf.it/2026/11/la-spezia-il-bando-del-24-trofeo-di-natale/",
+   "data": "2026-11-26",
+   "club": false
+  },
+  {
    "titolo": "La FICSF contro la violenza di genere",
    "url": "https://ficsf.it/2026/11/la-ficsf-contro-la-violenza-di-genere/",
    "data": "2026-11-25",
@@ -13878,18 +13890,6 @@
    "club": false
   },
   {
-   "titolo": "Variazione date Corso Allenatore 1° Livello",
-   "url": "https://ficsf.it/2026/11/variazione-date-corso-allenatore-1-livello/",
-   "data": "2026-11-05",
-   "club": false
-  },
-  {
-   "titolo": "Convocazione Assemblea Comitato regionale FICSF Liguria",
-   "url": "https://ficsf.it/2026/11/convocazione-assemblea-comitato-regionale-ficsf-liguria/",
-   "data": "2026-11-05",
-   "club": false
-  },
-  {
    "titolo": "Gran Fondo Jole Elba: tutti i vincitori della gara di Porto Ceresio",
    "url": "https://ficsf.it/2026/10/gran-fondo-jole-elba-tutti-i-vincitori-della-gara-di-porto-ceresio/",
    "data": "2026-10-26",
@@ -13941,6 +13941,6 @@
  "pagina": "https://ficsf.it/classifiche/classifiche-2026/",
  "stato": "ok",
  "messaggio": "",
- "aggiornato": "2026-11-26T05:34:18+00:00",
- "controllato": "2026-11-26T05:34:18+00:00"
+ "aggiornato": "2026-11-27T05:35:32+00:00",
+ "controllato": "2026-11-27T05:35:32+00:00"
 }
